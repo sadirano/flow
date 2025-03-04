@@ -8,13 +8,13 @@ It supports both romaji and kana modes.
 
 import tkinter as tk
 import random, time, threading, winsound, difflib, os, sys
-from utils import (hide_parenthesis_info, load_questions, load_persistent_stats,
+from utils_math import (hide_parenthesis_info, load_questions, load_persistent_stats,
                    save_persistent_stats, get_weight, merge_stats)
 from gui import AutocompleteEntry, FONT_BOLD_SMALL
 from kana import convert_romaji_to_kana
 
 # Configuration constants
-LOOP_TIME = 200000  # milliseconds between spawning new quiz windows
+LOOP_TIME = 90000 * 1000  # milliseconds between spawning new quiz windows
 FACTOR_FAIL = 0.75
 FACTOR_SUCCESS = 1.5
 
@@ -46,6 +46,8 @@ class QuizApplication:
 
     def schedule_quiz(self):
         for _ in range(10):
+            if len(self.open_entries) >= 10:
+                break
             prompt, correct_answer = random.choices(self.questions, weights=self.weights, k=1)[0]
             visible_prompt = hide_parenthesis_info(prompt)
             self.session_stats[visible_prompt]["asked"] += 1
@@ -62,6 +64,8 @@ class QuizApplication:
                     self.session_stats[visible_prompt]["correct"] += 1
                     self.session_stats[visible_prompt]["score"] *= FACTOR_SUCCESS
                     print(f"\033[92mCorrect! {message}\033[0m")
+                    if len(self.open_entries) == 0:
+                        self.root.after(10000, self.schedule_quiz)
                 else:
                     self.session_stats[visible_prompt]["incorrect"] += 1
                     self.session_stats[visible_prompt]["score"] *= FACTOR_FAIL
@@ -86,7 +90,7 @@ class QuizApplication:
     def gui_ask_question_async(self, prompt, correct_answer, autocomplete_list, callback):
         result = {}
         growth_count = 0
-        max_growth = 15
+        max_growth = 0
         growth_interval = 30000  # 30 seconds.
         font_increase = 2
         initial_font_size = 24
@@ -94,13 +98,11 @@ class QuizApplication:
         quiz = tk.Toplevel(self.root)
         quiz.overrideredirect(True)
         quiz.attributes("-topmost", True)
-        #trans_color = "#010101"
-        #quiz.configure(bg=trans_color)
-        #quiz.wm_attributes("-transparentcolor", trans_color)
+        trans_color = "#010101"
 
         screen_width = quiz.winfo_screenwidth()
         screen_height = quiz.winfo_screenheight()
-        win_width, win_height = 700, 250
+        win_width, win_height = 150, 100
         x = random.randint(0, max(0, screen_width - win_width))
         y = random.randint(0, max(0, screen_height - win_height))
         quiz.geometry(f"{win_width}x{win_height}+{x}+{y}")
@@ -148,7 +150,7 @@ class QuizApplication:
                 user_ans_conv = user_ans
                 correct_ans_conv = correct_answer
 
-            if user_ans_conv and user_ans_conv in correct_ans_conv:
+            if user_ans_conv and user_ans_conv == correct_ans_conv:
                 result["result"] = "correct"
             else:
                 result["result"] = "wrong"

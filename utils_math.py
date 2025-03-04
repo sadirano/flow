@@ -28,18 +28,9 @@ def load_questions(filename):
     Returns a list of tuples: (prompt, answer)
     """
     questions = []
-    with open(filename, encoding='utf-8') as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue  # skip empty lines
-            parts = line.split(" : ")
-            if len(parts) != 2:
-                print(f"Skipping invalid line: {line}")
-                continue
-            prompt = parts[0].strip()
-            answer = parts[1].strip().lower()
-            questions.append((prompt, answer))
+    for a in range(90):
+        for b in range(10):
+            questions.append((f"{a}+{b}", f"{a}+{b}={a + b}"))
     return questions
 
 def load_persistent_stats(stats_filename):

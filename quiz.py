@@ -5,7 +5,7 @@ This module contains the main GUI quiz application.
 It uses the utilities from utils.py and gui components from gui.py.
 It supports both romaji and kana modes.
 """
-
+from datetime import datetime
 import tkinter as tk
 import random, time, threading, winsound, difflib, os, sys
 from utils import (hide_parenthesis_info, load_questions, load_persistent_stats,
@@ -14,9 +14,12 @@ from gui import AutocompleteEntry, FONT_BOLD_SMALL
 from kana import convert_romaji_to_kana
 
 # Configuration constants
-LOOP_TIME = 200000  # milliseconds between spawning new quiz windows
+LOOP_TIME = 90000 * 1000  # milliseconds between spawning new quiz windows
 FACTOR_FAIL = 0.75
 FACTOR_SUCCESS = 1.5
+
+t = datetime.now()
+print(f"Start time {t}")
 
 class QuizApplication:
     def __init__(self, filename, mode="romaji"):
@@ -45,7 +48,9 @@ class QuizApplication:
         self.loop_time = LOOP_TIME
 
     def schedule_quiz(self):
-        for _ in range(10):
+        for _ in range(5):
+            if len(self.open_entries) >= 5:
+                break
             prompt, correct_answer = random.choices(self.questions, weights=self.weights, k=1)[0]
             visible_prompt = hide_parenthesis_info(prompt)
             self.session_stats[visible_prompt]["asked"] += 1
@@ -57,18 +62,22 @@ class QuizApplication:
                 correct_kana = convert_romaji_to_kana(correct_answer) if self.mode == "kana" else correct_answer
 
                 message = f"{prompt} reads as {correct_kana}" if self.mode == "kana" else f"{prompt} means {correct_answer}"
-                
+                global t
+                elapsed_time = datetime.now() -t
+                t = datetime.now()
                 if result.get("result") == "correct":
                     self.session_stats[visible_prompt]["correct"] += 1
                     self.session_stats[visible_prompt]["score"] *= FACTOR_SUCCESS
-                    print(f"\033[92mCorrect! {message}\033[0m")
+                    print(f"\033[92m{t} ({elapsed_time}) : - Correct! {message}\033[0m")
+                    if len(self.open_entries) <= 0:
+                        self.root.after(15000, self.schedule_quiz)
                 else:
                     self.session_stats[visible_prompt]["incorrect"] += 1
                     self.session_stats[visible_prompt]["score"] *= FACTOR_FAIL
                     suggestion = difflib.get_close_matches(result.get("user_answer", ""), self.answer_candidates, n=1, cutoff=0.6)
                     if suggestion and suggestion[0] == correct_answer:
                         print("Almost correct! (spelling issue)")
-                    print(f"\033[91mWrong!   {message}\033[0m")
+                    print(f'\033[91m{t} {elapsed_time} : - Wrong! {result.get("user_answer", "")}  {message}\033[0m')
                     self.schedule_quiz()
 
                 self.review_log.append({
@@ -81,12 +90,11 @@ class QuizApplication:
                 })
             
             self.gui_ask_question_async(prompt, correct_answer, self.answer_candidates, callback)
-        self.root.after(self.loop_time, self.schedule_quiz)
 
     def gui_ask_question_async(self, prompt, correct_answer, autocomplete_list, callback):
         result = {}
         growth_count = 0
-        max_growth = 15
+        max_growth = 0
         growth_interval = 30000  # 30 seconds.
         font_increase = 2
         initial_font_size = 24
@@ -94,13 +102,11 @@ class QuizApplication:
         quiz = tk.Toplevel(self.root)
         quiz.overrideredirect(True)
         quiz.attributes("-topmost", True)
-        #trans_color = "#010101"
-        #quiz.configure(bg=trans_color)
-        #quiz.wm_attributes("-transparentcolor", trans_color)
+        trans_color = "#010101"
 
         screen_width = quiz.winfo_screenwidth()
         screen_height = quiz.winfo_screenheight()
-        win_width, win_height = 700, 250
+        win_width, win_height = 200, 100
         x = random.randint(0, max(0, screen_width - win_width))
         y = random.randint(0, max(0, screen_height - win_height))
         quiz.geometry(f"{win_width}x{win_height}+{x}+{y}")
@@ -108,16 +114,15 @@ class QuizApplication:
         current_font_size = initial_font_size
         font_bold_large = ("Arial", current_font_size, "bold")
         visible_prompt = hide_parenthesis_info(prompt)
-        question_label = tk.Label(quiz, text=visible_prompt + ' ●', font=font_bold_large, fg="white", bg=trans_color)
+        question_label = tk.Label(quiz, text=visible_prompt, font=font_bold_large, fg="white", bg=trans_color)
         question_label.pack(pady=10)
 
-        entry = AutocompleteEntry(autocomplete_list, quiz, mode=self.mode, font=FONT_BOLD_SMALL,
+        entry = AutocompleteEntry([], quiz, mode=self.mode, font=FONT_BOLD_SMALL,
                           fg="white", bg=trans_color, relief="flat", insertbackground="white", width=20)
         self.open_entries.append(entry)
         entry.bind("<Destroy>", lambda _, w=entry: self.open_entries.remove(w))
         entry.bind("<Control-Tab>", lambda _: self.focus_next_quiz())
         entry.bind("<Control-Shift-Tab>", lambda _: self.focus_previous_quiz())
-        entry.set_suggestions(autocomplete_list)
         entry.pack(pady=5)
         entry.focus_set()
         entry.focus_force()
@@ -148,7 +153,7 @@ class QuizApplication:
                 user_ans_conv = user_ans
                 correct_ans_conv = correct_answer
 
-            if user_ans_conv and user_ans_conv in correct_ans_conv:
+            if user_ans_conv and user_ans_conv == correct_ans_conv:
                 result["result"] = "correct"
             else:
                 result["result"] = "wrong"
@@ -189,7 +194,7 @@ class QuizApplication:
         self.root.quit()
 
     def wait_for_console(self):
-        input("Press Enter in the console to end the session...\n")
+        input("")
         self.root.after(0, self.end_session)
 
     def run(self):
